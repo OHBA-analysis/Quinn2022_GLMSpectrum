@@ -1,0 +1,16 @@
+numpy==1.21.6
+scipy==1.7.1
+pandas==1.3.5
+dill==0.3.2
+h5py==2.10.0
+anamnesis==1.0.4
+mne==1.0.0
+requests==2.26.0
+osl==0.1.1
+matplotlib==3.5.2
+dask==2022.2.0
+anamnesis==1.0.4
+beautifulsoup4==4.11.1
+PyYAML==6.0
+sails==1.3.0
+glmtools==0.2.0

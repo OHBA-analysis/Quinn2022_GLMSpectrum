@@ -1,0 +1,16 @@
+meta:
+  event_codes:
+preproc:
+  - lemon_set_channel_montage:      None
+  - lemon_create_heog:              None
+  - set_channel_types:              {VEOG: eog, HEOG: eog}
+  - crop:                           {tmin: 10}
+  - filter:                         {l_freq: 0.25, h_freq: 125, method: 'iir', iir_params: {order: 5, ftype: butter}}
+  - notch_filter:                   {freqs: 50 100}
+  - bad_channels:                   {picks: 'eeg'}
+  - resample:                       {sfreq: 250}
+  - bad_segments:                   {segment_len: 2500, picks: 'eog'}
+  - lemon_ica:                      {n_components: 30, picks: eeg}
+  - bad_segments:                   {segment_len: 500, picks: 'eeg'}
+  - bad_segments:                   {segment_len: 500, picks: 'eeg', mode: 'diff'}
+  - interpolate_bads:               None
