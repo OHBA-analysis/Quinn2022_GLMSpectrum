@@ -13,6 +13,32 @@ import logging
 logger = logging.getLogger('osl')
 
 
+def lemon_set_standard_montage(glmsp):
+    from pathlib import Path
+    pth = Path(mne.channels.__file__).parent
+    pth = pth / 'data' / 'montages' / 'brainproducts-RNP-BA-128.txt'
+
+    fbase = os.path.join(cfg['lemon_processed_data'], 'sub-010002', 'sub-010002_preproc_raw.fif')
+    reference = mne.io.read_raw_fif(fbase).pick_types(eeg=True)
+
+    new = []
+    with open(pth, 'r') as f:
+        for line in f.readlines():
+            tag = line.split(' ')[0]
+            if tag == 'Name' or tag in reference.ch_names:
+                new.append(line)
+    new_mon = os.path.join(cfg['code_dir'], 'lemon_custom_montage.txt')
+    with open(new_mon, 'w') as f:
+        for line in new:
+            f.write(line)
+
+    from mne.channels._standard_montage_utils import _read_theta_phi_in_degrees
+    mon =  _read_theta_phi_in_degrees(new_mon, mne.defaults.HEAD_SIZE_DEFAULT)
+    reference = reference.set_montage(mon)
+    glmsp.info = reference.info
+    return glmsp
+
+
 def lemon_set_channel_montage(dataset, userargs):
     logger.info('LEMON Stage - load and set channel montage')
     logger.info('userargs: {0}'.format(str(userargs)))
@@ -42,7 +68,7 @@ def get_eeg_data(raw, csd=True):
     """Load EEG and perform sanity checks."""
 
     # Use first scan as reference for channel labels and order
-    fbase = os.path.join(cfg['lemon_processed_data'], 'sub-010002_preproc_raw.fif')
+    fbase = os.path.join(cfg['lemon_processed_data'], 'sub-010002', 'sub-010002_preproc_raw.fif')
     reference = mne.io.read_raw_fif(fbase).pick_types(eeg=True)
     mon = reference.get_montage()
 
@@ -139,6 +165,24 @@ def lemon_ica(dataset, userargs, logfile=None):
         dataset['ica'].apply(dataset['raw'])
     else:
         logger.info('Components were not removed from raw data')
+    return dataset
+
+
+def lemon_zapline_dss(dataset, userargs, logfile=None):
+    logger.info('LEMON Stage - ZapLine power removal')
+    logger.info('userargs: {0}'.format(str(userargs)))
+    from meegkit import dss
+    # https://mne.discourse.group/t/clean-line-noise-zapline-method-function-for-mne-using-meegkit-toolbox/7407
+    fline = userargs.get('fline', 50)
+
+    data = dataset['raw'].get_data() # Convert mne data to numpy darray
+    sfreq = dataset['raw'].info['sfreq'] # Extract the sampling freq
+   
+    #Apply MEEGkit toolbox function
+    out, _ = dss.dss_line(data.T, fline, sfreq, nremove=4) # fline (Line noise freq) = 50 Hz for Europe
+
+    dataset['raw']._data = out.T # Overwrite old data
+
     return dataset
 
 
@@ -241,7 +285,7 @@ def lemon_make_blinks_regressor(raw, corr_thresh=0.75, figpath=None):
     return blink_covariate, eog_events.shape[0], clean.average(picks='eog')
 
 
-def lemon_make_bads_regressor(raw, mode='raw'):
+def lemon_make_bads_regressor(raw, mode='eeg'):
     bads = np.zeros((raw.n_times,))
     for an in raw.annotations:
         if an['description'].startswith('bad') and an['description'].endswith(mode):

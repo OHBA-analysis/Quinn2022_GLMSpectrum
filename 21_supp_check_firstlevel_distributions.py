@@ -20,7 +20,7 @@ from lemon_support import (get_eeg_data, lemon_make_bads_regressor,
 #%% ----------------------------------------------------------
 # GLM-Prep
 
-fbase = os.path.join(cfg['lemon_processed_data'], '{subj}_preproc_raw.fif')
+fbase = os.path.join(cfg['lemon_processed_data'], '{subj}/{subj}_preproc_raw.fif')
 st = osl.utils.Study(fbase)
 
 fname = st.get(subj='sub-010060')[0]
@@ -35,57 +35,110 @@ raw = mne.io.read_raw_fif(fname, preload=True)
 picks = mne.pick_types(raw.info, eeg=True, ref_meg=False)
 chlabels = np.array(raw.info['ch_names'], dtype=h5py.special_dtype(vlen=str))[picks]
 
+fbase = os.path.join(cfg['lemon_processed_data'], 'sub-010002', 'sub-010002_preproc_raw.fif')
+reference = mne.io.read_raw_fif(fbase).pick_types(eeg=True)
+
 #%% ----------------------------------------------------------
 # GLM-Prep
 
 # Make blink regressor
 blink_vect, numblinks, evoked_blink = lemon_make_blinks_regressor(raw, figpath=None)
 
-veog = raw.get_data(picks='ICA-VEOG')[0, :]**2
-veog = veog > np.percentile(veog, 97.5)
-
-heog = raw.get_data(picks='ICA-HEOG')[0, :]**2
-heog = heog > np.percentile(heog, 97.5)
+veog = np.abs(raw.get_data(picks='ICA-VEOG')[0, :])
+heog = np.abs(raw.get_data(picks='ICA-HEOG')[0, :])
 
 # Make task regressor
 task = lemon_make_task_regressor({'raw': raw})
 
 # Make bad-segments regressor
-bads_raw = lemon_make_bads_regressor(raw, mode='raw')
-bads_diff = lemon_make_bads_regressor(raw, mode='diff')
+bads = lemon_make_bads_regressor(raw)
+print('Bad segs in regressor {} / {}'.format(bads.sum(), len(bads)))
 
 # Get data
-XX = get_eeg_data(raw).T
+XX = get_eeg_data(raw)
 print(XX.shape)
 
 # Run GLM-Periodogram
-conds = {'Eyes Open': task == 1, 'Eyes Closed': task == -1}
+
+conds = {'Eyes Open': task > 0, 'Eyes Closed': task < 0}
 covs = {'Linear Trend': np.linspace(0, 1, raw.n_times)}
-confs = {'Bad Segments': bads_raw,
-         'Bad Segments Diff': bads_diff,
-         'V-EOG': veog, 'H-EOG': heog}
-conts = [{'name': 'Mean', 'values': {'Eyes Open': 0.5, 'Eyes Closed': 0.5}},
-         {'name': 'Open < Closed', 'values': {'Eyes Open': 1, 'Eyes Closed': -1}}]
+confs = {'Bad Segs': bads,
+            'V-EOG': veog, 'H-EOG': heog}
+eo_val = np.round(np.sum(task == 1) / len(task), 3)
+ec_val = np.round(np.sum(task == -1) / len(task), 3)
+conts = [{'name': 'RestMean', 'values': {'Eyes Open': 0.5, 'Eyes Closed': 0.5}},
+            {'name': 'Open>Closed', 'values': {'Eyes Open': 1, 'Eyes Closed': -1}}]
 
 fs = raw.info['sfreq']
 
+# Reduced model - no confounds or covariates
+glmspec_mag = osl.glm.glm_spectrum(XX, fmin=1, fmax=95,
+                            fs=fs,
+                            fit_intercept=False,
+                            nperseg=int(fs * 2),
+                            mode='magnitude',
+                            contrasts=conts,
+                            reg_categorical=conds,
+                            reg_ztrans=covs, reg_unitmax=confs,
+                           standardise_data=False)
+glmspec_mag = osl.glm.SensorGLMSpectrum(glmspec_mag, reference.info) # Store with standard channel info
+
+# Reduced model - no confounds or covariates
+glmspec_pow = osl.glm.glm_spectrum(XX, fmin=1, fmax=95,
+                            fs=fs,
+                            fit_intercept=False,
+                            nperseg=int(fs * 2),
+                            mode='psd',
+                            contrasts=conts,
+                            reg_categorical=conds,
+                            reg_ztrans=covs, reg_unitmax=confs,
+                            standardise_data=False)
+glmspec_pow = osl.glm.SensorGLMSpectrum(glmspec_pow, reference.info) # Store with standard channel info
+
+# Reduced model - no confounds or covariates
+glmspec_log2 = osl.glm.glm_spectrum(XX, fmin=1, fmax=95,
+                            fs=fs,
+                            fit_intercept=False,
+                            nperseg=int(fs * 2),
+                            mode='log_psd',
+                            contrasts=conts,
+                            reg_categorical=conds,
+                            reg_ztrans=covs, reg_unitmax=confs,
+                            standardise_data=False)
+glmspec_log2 = osl.glm.SensorGLMSpectrum(glmspec_log2, reference.info) # Store with standard channel info
+
+# Reduced model - no confounds or covariates
+glmspec_log = deepcopy(glmspec_pow)
+glmspec_log.data.data = np.log(glmspec_log.data.data)
+glmspec_log.model = glm.fit.OLSModel(glmspec_log.design, glmspec_log.data)
+
+
 #%% ----------------------------------------------------------
-# GLM-Run
+# Figure
+
+plt.figure(figsize=(16, 9))
+plt.subplots_adjust(wspace=0.45, hspace=0.35, left=0.04, right=0.975)
+ax = plt.subplot(2, 3, 1)
+glmspec_pow.plot_joint_spectrum(0, base=0.5, freqs=(3, 9 , 25), ax=ax)
+ax = plt.subplot(2, 3, 2)
+glmspec_mag.plot_joint_spectrum(0, base=0.5, freqs=(3, 9 , 25), ax=ax, ylabel='Magnitude')
+ax = plt.subplot(2, 3, 3)
+glmspec_log.plot_joint_spectrum(0, base=0.5, freqs=(3, 9 , 25), ax=ax, ylabel='log(Power)')
+
+ax = plt.subplot(2, 3, 4)
+glmspec_pow.plot_joint_spectrum(1, base=0.5, freqs=(3, 9 , 25), ax=ax, metric='tstats')
+ax = plt.subplot(2, 3, 5)
+glmspec_mag.plot_joint_spectrum(1, base=0.5, freqs=(3, 9 , 25), ax=ax, metric='tstats')
+ax = plt.subplot(2, 3, 6)
+glmspec_log.plot_joint_spectrum(1, base=0.5, freqs=(3, 9 , 25), ax=ax, metric='tstats')
 
 
-# Simple model
-f, c, v, extras = sails.stft.glm_periodogram(XX, axis=0,
-                                             fit_constant=False,
-                                             conditions=conds,
-                                             covariates=covs,
-                                             confounds=confs,
-                                             contrasts=conts,
-                                             nperseg=int(fs*2),
-                                             noverlap=int(fs),
-                                             fmin=0.1, fmax=100,
-                                             fs=fs, mode='magnitude',
-                                             fit_method='glmtools')
-model, design, data = extras
+fout = os.path.join(cfg['lemon_figures'], 'lemon-supp_first-level-distribution-comparison.png')
+plt.savefig(fout, transparent=True, dpi=300)
+fout = os.path.join(cfg['lemon_figures'], 'lemon-supp_first-level-distribution-comparison_low-res.png')
+plt.savefig(fout, transparent=True, dpi=100)
+
+eye
 
 data_pow = deepcopy(data)
 data_pow.data = data_pow.data**2

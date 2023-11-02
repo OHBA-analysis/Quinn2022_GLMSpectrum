@@ -1,4 +1,4 @@
-lemon_raw: None
-lemon_output: None
+lemon_raw: /rds/projects/q/quinna-spectral-changes-in-ageing/raw_data
+lemon_output: /rds/projects/q/quinna-spectral-changes-in-ageing/
 lemon_raw_url: https://ftp.gwdg.de/pub/misc/MPI-Leipzig_Mind-Brain-Body-LEMON/EEG_MPILMBB_LEMON/EEG_Raw_BIDS_ID/
 lemon_behav_url: https://ftp.gwdg.de/pub/misc/MPI-Leipzig_Mind-Brain-Body-LEMON/Behavioural_Data_MPILMBB_LEMON/

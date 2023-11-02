@@ -15,25 +15,25 @@ from dask.distributed import Client
 
 from glm_config import cfg
 from lemon_support import (lemon_create_heog, lemon_ica,
-                           lemon_set_channel_montage)
+                           lemon_set_channel_montage, lemon_zapline_dss)
 
 #%% ------------------------------
 # User options to set
 
 subj = 'all'  # Set to 'sub-010060' to run single subject in paper examples
-n_dask_workers = 8  # Number of dask parallel workers to use if subj is 'all'
+n_dask_workers = 45  # Number of dask parallel workers to use if subj is 'all'
 
 #%% -------------------------------
 # Main code
 
 if __name__ == '__main__':
 
-    extra_funcs = [lemon_set_channel_montage, lemon_create_heog, lemon_ica]
+    extra_funcs = [lemon_set_channel_montage, lemon_create_heog, lemon_ica, lemon_zapline_dss]
 
     fbase = os.path.join(cfg['lemon_raw_eeg'], '{subj}', 'RSEEG', '{subj}.vhdr')
     st = osl.utils.Study(fbase)
 
-    config = osl.preprocessing.load_config('lemon_preproc.yml')
+    config = osl.preprocessing.load_config('lemon_preproc_revisions.yml')
     proc_outdir = cfg['lemon_processed_data']
 
     if subj == 'all':
@@ -42,7 +42,8 @@ if __name__ == '__main__':
         goods = osl.preprocessing.run_proc_batch(config, st.match_files, proc_outdir,
                                                  overwrite=True,
                                                  extra_funcs=extra_funcs,
-                                                 dask_client=True)
+                                                 dask_client=True,
+                                                 gen_report=False)
     else:
         # Run a single subject
         inputs = st.get(subj=subj)

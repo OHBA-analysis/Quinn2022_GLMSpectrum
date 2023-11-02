@@ -44,6 +44,11 @@ reduceds = os.path.join(cfg['lemon_glm_data'], 'lemon_eeg_sensorglm_groupdata_re
 data = obj_from_hdf5file(inputs, 'data')
 datareduced = obj_from_hdf5file(reduceds, 'data')
 
+# Drop dataset with enormous V-EOG effect - different order of magnitude to rest
+ind = np.argmax(data.data[:, 11, :, :].mean(axis=(1,2)))
+data = data.drop(ind)
+datareduced = datareduced.drop(ind)
+
 data.info['age_group'] = np.array(data.info['age']) < 45
 
 tbv = []
@@ -89,10 +94,12 @@ DC.add_simple_contrasts()
 
 design = DC.design_from_datainfo(clean_data.info)
 gmodel = glm.fit.OLSModel(design, clean_data)
+
 gmodel_reduced = glm.fit.OLSModel(design, clean_reduced)
 
 with h5py.File(os.path.join(cfg['lemon_glm_data'], 'lemon-group_glm-data.hdf5'), 'w') as F:
     gmodel.to_hdf5(F.create_group('model'))
+    gmodel_reduced.to_hdf5(F.create_group('model_reduced'))
     design.to_hdf5(F.create_group('design'))
     # hdf5 is messy sometimes - hopefully someone improves string type handling sometime
     clean_data.info['subj_id'] = np.array(clean_data.info['subj_id'],
@@ -119,8 +126,8 @@ adjacency = mne.stats.cluster_level._setup_adjacency(adjacency, ntests, ntimes)
 
 cft = 3
 tstat_args = {'varcope_smoothing': 'medfilt',
-              'window_size': 15, 'smooth_dims': 1}
-
+              'window_size': 5, 'smooth_dims': 1}
+#tstat_args = {}
 
 # Each line is  (group cont, firstlevel cont, group regressor, firstlevel regressor, savename)
 to_permute = (
@@ -146,17 +153,17 @@ for icon in range(len(to_permute)):
     fl_mean_data.data = clean_data.data[:, fl_con, :, :]
 
     if icon > 0 and gl_con == 0:
-        cft = 6
+        cft = 5
     else:
         cft = 3
 
     p = glm.permutations.MNEClusterPermutation(design, fl_mean_data, gl_con, 1500,
-                                               nprocesses=8,
+                                               nprocesses=24,
                                                metric='tstats',
                                                cluster_forming_threshold=cft,
                                                tstat_args=tstat_args,
                                                adjacency=adjacency)
 
-    dill_fname = os.path.join(cfg['lemon_glm_data'], 'lemon-group_perms-{0}.pkl'.format(p_name))
+    dill_fname = os.path.join(cfg['lemon_glm_data'], 'lemon-group_smo-5_perms-{0}.pkl'.format(p_name))
     with open(dill_fname, "wb") as dill_file:
         dill.dump(p, dill_file)

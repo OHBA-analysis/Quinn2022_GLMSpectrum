@@ -15,7 +15,7 @@ from lemon_support import get_eeg_data
 #%% ----------------------------------------------------------
 # Prep
 
-fbase = os.path.join(cfg['lemon_processed_data'], '{subj}_preproc_raw.fif')
+fbase = os.path.join(cfg['lemon_processed_data'], '{subj}/{subj}_preproc_raw.fif')
 st = osl.utils.Study(fbase)
 
 fname = st.get(subj='sub-010060')[0]
